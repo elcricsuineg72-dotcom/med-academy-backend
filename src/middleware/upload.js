@@ -9,14 +9,21 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Store PDFs directly on Cloudinary
+// Store PDFs directly on Cloudinary WITH proper extensions
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder:        'med-academy/uploads',
-    resource_type: 'raw',          // required for non-image files like PDFs
-    format:        'pdf',
-    allowed_formats: ['pdf'],
+  params: async (req, file) => {
+    // 1. Remove spaces and grab the original name without the old extension
+    const cleanName = file.originalname.split('.')[0].replace(/\s+/g, '-');
+    // 2. Generate a random string to prevent overwriting files with the same name
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    
+    return {
+      folder: 'med-academy/uploads',
+      resource_type: 'raw', 
+      // 3. FORCE Cloudinary to add .pdf to the final URL
+      public_id: `${cleanName}-${uniqueSuffix}.pdf` 
+    };
   },
 });
 
@@ -31,7 +38,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 52428800 },
+  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 52428800 }, // 50MB
 });
 
 module.exports = upload;
