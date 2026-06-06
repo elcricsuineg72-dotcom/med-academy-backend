@@ -1,27 +1,27 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('cloudinary').v2;
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+// Store PDFs directly on Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder:        'med-academy/uploads',
+    resource_type: 'raw',          // required for non-image files like PDFs
+    format:        'pdf',
+    allowed_formats: ['pdf'],
   },
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimes = ['application/pdf'];
-  if (allowedMimes.includes(file.mimetype)) {
+  if (file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
     cb(new Error('Only PDF files are allowed'), false);
@@ -31,9 +31,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 52428800, // 50MB
-  },
+  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 52428800 },
 });
 
 module.exports = upload;
