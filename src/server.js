@@ -19,8 +19,21 @@ const app = express();
 connectDB();
 
 // Middleware
+const allowedOrigins = [
+  process.env.CORS_ORIGIN,
+  'http://localhost:5173',
+  'https://med-academy-frontend.vercel.app',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Render health checks, Postman, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(o => origin.startsWith(o))) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true,
 }));
 
