@@ -260,24 +260,25 @@ const uploadContent = async (req, res) => {
   }
 
   const { title, category, year, sortOrder, isPublished } = req.body;
-  const fileUrl = `/uploads/${req.file.filename}`;
+
+  // Cloudinary gives us req.file.path as the full public URL
+  const fileUrl  = req.file.path;
+  const fileName = req.file.originalname;
+  const fileSize = req.file.size || 0;
 
   const content = await Content.create({
     title,
-    module: req.params.id,
+    module:      req.params.id,
     category,
-    year: year ? parseInt(year) : undefined,
-    fileUrl,
-    fileName: req.file.originalname,
-    fileSize: req.file.size,
-    mimeType: req.file.mimetype,
-    sortOrder: sortOrder ? parseInt(sortOrder) : 0,
+    year:        year ? parseInt(year) : undefined,
+    fileUrl,                        // full Cloudinary URL now
+    fileName,
+    fileSize,
+    mimeType:    'application/pdf',
+    sortOrder:   sortOrder ? parseInt(sortOrder) : 0,
     isPublished: isPublished === 'true',
-    uploadedBy: req.user._id,
+    uploadedBy:  req.user._id,
   });
-
-  // Update module views
-  await Module.findByIdAndUpdate(req.params.id, { $push: { content: content._id } });
 
   res.status(201).json({ success: true, data: content });
 };
@@ -298,10 +299,25 @@ const deleteContent = async (req, res) => {
   const content = await Content.findById(req.params.id);
   if (!content) return res.status(404).json({ success: false, message: 'Content not found' });
 
-  // Delete file from disk if local
-  if (content.fileUrl && content.fileUrl.startsWith('/uploads/')) {
-    const filePath = path.join(__dirname, '../../', content.fileUrl);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  // Delete from Cloudinary if it's a Cloudinary URL
+  if (content.fileUrl && content.fileUrl.includes('cloudinary.com')) {
+    try {
+      // Extract public_id from the URL
+      const urlParts  = content.fileUrl.split('/');
+      const fileName  = urlParts[urlParts.length - 1].split('.')[0];
+      const folder    = 'med-academy/uploads';
+      const publicId  = `${folder}/${fileName}`;
+      const cloudinary = require('cloudinary').v2;
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key:    process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
+    } catch (err) {
+      console.log('Cloudinary delete warning:', err.message);
+      // Don't block deletion if Cloudinary cleanup fails
+    }
   }
 
   await Content.findByIdAndDelete(req.params.id);
